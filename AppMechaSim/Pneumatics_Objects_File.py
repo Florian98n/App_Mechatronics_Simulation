@@ -1,5 +1,11 @@
 from PIL import ImageTk, Image
 import tkinter as tk
+import Photos_File
+from functools import partial
+first_connection_flag = 0
+second_connection_flag = 0
+first_connection_x = 0
+first_connection_y = 0
 
 
 class PneumaticsObject:
@@ -26,143 +32,252 @@ class PneumaticsObject:
         self.element_number = index_number  # index number of element(new element => index+1)
         self.tk_photo = 0
         self.image_id = 0
+        self.flag_connections = 0
         self.flag_left_control = [0] * 6
         self.flag_right_control = [0] * 6
         self.tag_name_left = "empty"
         self.tag_name_right = "empty"
         self.left_manual_control_id_image = None
         self.right_manual_control_id_image = None
-        self.left_chamber_active = 0                     # always left position is initial position
+        self.left_chamber_active = 0  # always left position is initial position
+        if self.element_type == 0:
+            if self.element_index == 2:
+                self.tag_connection = [None]*2
+                self.connection_id_image = [None]*2
+                self.connection_image = [ImageTk.PhotoImage(Photos_File.circle_connection_red)]*2
+            if self.element_index == 4 or self.element_index == 5:
+                self.index_shift = 3
+            if self.element_index == 6:
+                self.index_shift = 4
+                self.tag_connection = [None]*5
+                self.connection_id_image = [None]*5
+                self.connection_image = [ImageTk.PhotoImage(Photos_File.circle_connection_red)]*5
+            if self.element_index == 7:
+                self.tag_connection = [None]
+                self.connection_id_image = [None]
+                self.connection_image = [ImageTk.PhotoImage(Photos_File.circle_connection_red)]  # initial state: unconnected
+        if self.element_type == 1:
+            if self.element_index == 2:
+                self.tag_connection = [None]
+                self.connection_id_image = [None]
+                self.connection_image = [ImageTk.PhotoImage(Photos_File.circle_connection_red)]  # initial state: unconnected
+        if hasattr(self, 'tag_connection'):
+            for i in range(0, len(self.tag_connection)):
+                self.tag_connection[i] = "a"+str(self.element_type) + str(self.element_index) + str(self.element_number) + str(i)
         self.simulation_mode = 0
-        if self.element_index == 4 or self.element_index == 5:
-            self.index_shift = 3
-        if self.element_index == 6:
-            self.index_shift = 4
         self.shift_left = 0
+        self.adding_from_controls = 0
+        self.middle_connection_x = 0
+        self.middle_connection_y = 0
+        self.second_connection_x = 0
+        self.second_connection_y = 0
+        self.update_connection_points_Workspace = None
 
         self.init_flag = 1
         self.zoom_image(count_zoom)
         self.init_flag = 0
 
+    def show_connections(self, flag):
+        self.flag_connections = flag
+        if self.flag_connections == 1:
+            if self.element_type == 0:  # active
+                if self.element_index == 2:  # double cylinder 1
+                    self.connection_id_image[0] = self.canvas.create_image(
+                                                self.last_position_x - int(self.last_size_controls*2.6) + self.adding_from_controls,
+                                                self.last_position_y + self.last_size_controls,
+                                                image=self.connection_image[0], tag=self.tag_connection[0])
+                    self.connection_id_image[1] = self.canvas.create_image(
+                                                self.last_position_x + int(self.last_size_controls*2.23) + self.adding_from_controls,
+                                                self.last_position_y + self.last_size_controls,
+                                                image=self.connection_image[1], tag=self.tag_connection[1])
+                if self.element_index == 6:  # 5/2 valve
+                    self.connection_id_image[0] = self.canvas.create_image(
+                                                self.last_position_x - int(self.last_size_controls*0.66) + self.adding_from_controls,
+                                                self.last_position_y + self.last_size_controls,
+                                                image=self.connection_image[0], tag=str(self.tag_connection[0]))
+                    self.connection_id_image[1] = self.canvas.create_image(
+                                                self.last_position_x + self.adding_from_controls,
+                                                self.last_position_y + self.last_size_controls,
+                                                image=self.connection_image[1], tag=self.tag_connection[1])
+                    self.connection_id_image[2] = self.canvas.create_image(
+                                                self.last_position_x + int(self.last_size_controls * 0.66) + self.adding_from_controls,
+                                                self.last_position_y + self.last_size_controls,
+                                                image=self.connection_image[2], tag=self.tag_connection[2])
+                    self.connection_id_image[3] = self.canvas.create_image(
+                                                self.last_position_x - int(self.last_size_controls * 0.66) + self.adding_from_controls,
+                                                self.last_position_y - self.last_size_controls,
+                                                image=self.connection_image[3], tag=self.tag_connection[3])
+                    self.connection_id_image[4] = self.canvas.create_image(
+                                                self.last_position_x + int(self.last_size_controls * 0.66) + self.adding_from_controls,
+                                                self.last_position_y - self.last_size_controls,
+                                                image=self.connection_image[4], tag=self.tag_connection[4])
+                if self.element_index == 7:  # compressor
+                    self.connection_id_image[0] = self.canvas.create_image(
+                                             self.last_position_x + self.adding_from_controls,
+                                             self.last_position_y - self.last_size_controls / 2,
+                                             image=self.connection_image[0], tag=self.tag_connection[0])
+            if self.element_type == 1:
+                if self.element_index == 2:
+                    self.connection_id_image[0] = self.canvas.create_image(
+                        self.last_position_x + self.adding_from_controls,
+                        self.last_position_y - self.last_size_controls / 2,
+                        image=self.connection_image[0], tag=self.tag_connection[0])
+        else:
+            if hasattr(self, 'connection_id_image'):
+                for i in range(0, len(self.connection_id_image)):
+                    self.canvas.delete(self.connection_id_image[i])
+
+    def make_green(self, connection_index):
+        self.connection_image[connection_index] = ImageTk.PhotoImage(Photos_File.circle_connection_green)
+        self.canvas.itemconfig(self.connection_id_image[connection_index], image=self.connection_image[connection_index])
+
+    def connect_function(self):
+        global first_connection_flag, second_connection_flag, first_connection_x, first_connection_y
+        item_id = self.canvas.find_withtag("current")[0]
+        x1, y1, x2, y2 = self.canvas.bbox(item_id)
+        if first_connection_flag == 1:
+            self.second_connection_x = int((x1 + x2) / 2)
+            self.second_connection_y = int((y1 + y2) / 2)
+            self.middle_connection_x = first_connection_x
+            self.middle_connection_y = self.second_connection_y
+            temp = self.canvas.create_line(first_connection_x, first_connection_y,
+                                           self.middle_connection_x, self.middle_connection_y, fill='black',
+                                           width=2, tags='scale')
+            temp = self.canvas.create_line(self.middle_connection_x, self.middle_connection_y,
+                                           self.second_connection_x, self.second_connection_y, fill='black',
+                                           width=2, tags='scale')
+            second_connection_flag = 1
+        if first_connection_flag == 0:
+            first_connection_x = int((x1 + x2)/2)
+            first_connection_y = int((y1 + y2) / 2)
+            first_connection_flag = 1
+        if second_connection_flag == 1:
+            first_connection_flag = 0
+            second_connection_flag = 0
+
     def start_simulation(self):
         self.simulation_mode = 1
-        if self.element_index == 4 or self.element_index == 5 or self.element_index == 6:
-            empty_image = Image.new("RGBA", (self.last_size_controls, self.last_size_controls), (0, 0, 0, 0))
-            self.empty_photo = ImageTk.PhotoImage(empty_image)
-            if self.flag_left_control[0] == 1:
-                if self.flag_left_control[3] == 1:
-                    self.tag_name_left = str(self.element_type)+str(self.element_index)+str(self.element_number)+"left"
+        if self.element_type == 0:
+            if self.element_index == 4 or self.element_index == 5 or self.element_index == 6:
+                empty_image = Image.new("RGBA", (self.last_size_controls, self.last_size_controls), (0, 0, 0, 0))
+                self.empty_photo = ImageTk.PhotoImage(empty_image)
+                if self.flag_left_control[0] == 1:
+                    if self.flag_left_control[3] == 1:
+                        self.tag_name_left = str(self.element_type)+str(self.element_index)+str(self.element_number)+"left"
 
-                    self.left_manual_control_id_image = self.canvas.create_image(self.last_position_x - self.last_size_controls*self.index_shift,
-                                                                                 self.last_position_y,
-                                                                                 image=self.empty_photo,
-                                                                                 tag=self.tag_name_left, anchor='nw')
-                    self.canvas.tag_bind(self.tag_name_left, "<Enter>", lambda event: self.check_hand_enter_left())
-                    self.canvas.tag_bind(self.tag_name_left, "<Button-1>", lambda event: self.on_left_side_click())
-                    self.canvas.tag_bind(self.tag_name_left, "<Leave>", lambda event: self.check_hand_leave_left())
-            if self.flag_right_control[0] == 1:
-                if self.flag_right_control[3] == 1:
-                    self.tag_name_right = str(self.element_type)+str(self.element_index)+str(self.element_number)+"right"
-                    self.right_manual_control_id_image = self.canvas.create_image(self.last_position_x + self.last_size_controls*self.index_shift,
-                                                                                  self.last_position_y,
-                                                                                  image=self.empty_photo,
-                                                                                  tag=self.tag_name_right, anchor='ne')
-                    self.canvas.tag_bind(self.tag_name_right, "<Enter>", lambda event: self.check_hand_enter_right())
-                    if self.element_index == 6:
-                        self.canvas.tag_bind(self.tag_name_right, "<Button-1>", lambda event: self.on_right_side_click())
-                    self.canvas.tag_bind(self.tag_name_right, "<Leave>", lambda event: self.check_hand_leave_right())
+                        self.left_manual_control_id_image = self.canvas.create_image(self.last_position_x - self.last_size_controls*self.index_shift,
+                                                                                     self.last_position_y,
+                                                                                     image=self.empty_photo,
+                                                                                     tag=self.tag_name_left, anchor='nw')
+                        self.canvas.tag_bind(self.tag_name_left, "<Enter>", lambda event: self.check_hand_enter())
+                        self.canvas.tag_bind(self.tag_name_left, "<Button-1>", lambda event: self.on_left_side_click())
+                        self.canvas.tag_bind(self.tag_name_left, "<Leave>", lambda event: self.check_hand_leave())
+                if self.flag_right_control[0] == 1:
+                    if self.flag_right_control[3] == 1:
+                        self.tag_name_right = str(self.element_type)+str(self.element_index)+str(self.element_number)+"right"
+                        self.right_manual_control_id_image = self.canvas.create_image(self.last_position_x + self.last_size_controls*self.index_shift,
+                                                                                      self.last_position_y,
+                                                                                      image=self.empty_photo,
+                                                                                      tag=self.tag_name_right, anchor='ne')
+                        self.canvas.tag_bind(self.tag_name_right, "<Enter>", lambda event: self.check_hand_enter())
+                        if self.element_index == 6:
+                            self.canvas.tag_bind(self.tag_name_right, "<Button-1>", lambda event: self.on_right_side_click())
+                        self.canvas.tag_bind(self.tag_name_right, "<Leave>", lambda event: self.check_hand_leave())
 
     def on_left_side_click(self):
-        if self.element_index == 4 or self.element_index == 5 or self.element_index == 6:
-            self.check_hand_leave_left()
-            self.canvas.tag_unbind(self.tag_name_left, "<Button-1>")
-            if self.left_chamber_active == 0 or self.element_index == 6:
-                self.canvas.delete(self.image_id)
-                self.image_id = self.canvas.create_image(self.last_position_x + self.last_size_controls*2,
-                                                         self.last_position_y,
-                                                         image=self.tk_photo,
-                                                         tags=("clickable",
-                                                               str(self.element_index),
-                                                               str(self.element_number),
-                                                               str(self.last_position_x - self.last_width / 2),
-                                                               str(self.last_position_y - self.last_height / 2),
-                                                               str(self.last_position_x + self.last_width / 2),
-                                                               str(self.last_position_y + self.last_height / 2),
-                                                               str(self.element_type)))
-                self.canvas.delete(self.left_manual_control_id_image)
-                self.canvas.delete(self.right_manual_control_id_image)
-                if self.element_index == 4 or self.element_index == 5:
-                    self.left_manual_control_id_image = self.canvas.create_image(
-                        self.last_position_x - self.last_size_controls,
-                        self.last_position_y,
-                        image=self.empty_photo, tag=self.tag_name_left,
-                        anchor='nw')
-                    if self.flag_right_control[3] == 1:
-                        self.right_manual_control_id_image = self.canvas.create_image(
-                            self.last_position_x + self.last_size_controls*5,
+        if self.element_type == 0:
+            if self.element_index == 4 or self.element_index == 5 or self.element_index == 6:
+                self.check_hand_leave()
+                self.canvas.tag_unbind(self.tag_name_left, "<Button-1>")
+                if self.left_chamber_active == 0 or self.element_index == 6:
+                    self.canvas.delete(self.image_id)
+                    self.image_id = self.canvas.create_image(self.last_position_x + self.last_size_controls*2,
+                                                             self.last_position_y,
+                                                             image=self.tk_photo,
+                                                             tags=("clickable",
+                                                                   str(self.element_index),
+                                                                   str(self.element_number),
+                                                                   str(self.last_position_x - self.last_width / 2),
+                                                                   str(self.last_position_y - self.last_height / 2),
+                                                                   str(self.last_position_x + self.last_width / 2),
+                                                                   str(self.last_position_y + self.last_height / 2),
+                                                                   str(self.element_type)))
+                    self.canvas.delete(self.left_manual_control_id_image)
+                    self.canvas.delete(self.right_manual_control_id_image)
+                    if self.element_index == 4 or self.element_index == 5:
+                        self.left_manual_control_id_image = self.canvas.create_image(
+                            self.last_position_x - self.last_size_controls,
                             self.last_position_y,
-                            image=self.empty_photo, tag=self.tag_name_right,
-                            anchor='ne')
-                        self.canvas.tag_bind(self.tag_name_right, "<Button-1>", lambda event: self.on_right_side_click())
-                if self.element_index == 6:
-                    self.canvas.bind("<ButtonRelease-1>", self.on_left_release)
-            self.left_chamber_active = 1
+                            image=self.empty_photo, tag=self.tag_name_left,
+                            anchor='nw')
+                        if self.flag_right_control[3] == 1:
+                            self.right_manual_control_id_image = self.canvas.create_image(
+                                self.last_position_x + self.last_size_controls*5,
+                                self.last_position_y,
+                                image=self.empty_photo, tag=self.tag_name_right,
+                                anchor='ne')
+                            self.canvas.tag_bind(self.tag_name_right, "<Button-1>", lambda event: self.on_right_side_click())
+                    if self.element_index == 6:
+                        self.canvas.bind("<ButtonRelease-1>", self.on_left_release)
+                self.left_chamber_active = 1
 
     def on_right_side_click(self):
-        if self.element_index == 4 or self.element_index == 5 or self.element_index == 6:
-            self.check_hand_leave_right()
-            self.canvas.tag_unbind(self.tag_name_right, "<Button-1>")
-            if self.element_index == 6:
-                self.shift_left = 2
-            else:
-                self.shift_left = 0
-            if self.left_chamber_active == 1 or self.element_index == 6:
-                self.canvas.delete(self.image_id)
-                self.image_id = self.canvas.create_image(self.last_position_x - self.last_size_controls*self.shift_left,
-                                                         self.last_position_y,
-                                                         image=self.tk_photo,
-                                                         tags=("clickable",
-                                                               str(self.element_index),
-                                                               str(self.element_number),
-                                                               str(self.last_position_x - self.last_width / 2),
-                                                               str(self.last_position_y - self.last_height / 2),
-                                                               str(self.last_position_x + self.last_width / 2),
-                                                               str(self.last_position_y + self.last_height / 2),
-                                                               str(self.element_type)))
-                self.canvas.delete(self.left_manual_control_id_image)
-                self.canvas.delete(self.right_manual_control_id_image)
-                if self.element_index == 4 or self.element_index == 5:
-                    self.left_manual_control_id_image = self.canvas.create_image(
-                        self.last_position_x - self.last_size_controls*3,
-                        self.last_position_y,
-                        image=self.empty_photo, tag=self.tag_name_left,
-                        anchor='nw')
-                    if self.flag_left_control[3] == 1:
-                        self.right_manual_control_id_image = self.canvas.create_image(
-                            self.last_position_x + self.last_size_controls*3,
-                            self.last_position_y,
-                            image=self.empty_photo, tag=self.tag_name_right,
-                            anchor='ne')
-                        self.canvas.tag_bind(self.tag_name_left, "<Button-1>", lambda event: self.on_left_side_click())
+        if self.element_type == 0:
+            if self.element_index == 4 or self.element_index == 5 or self.element_index == 6:
+                self.check_hand_leave()
+                self.canvas.tag_unbind(self.tag_name_right, "<Button-1>")
                 if self.element_index == 6:
-                    self.canvas.bind("<ButtonRelease-1>", self.on_left_release)
-            self.left_chamber_active = 0
+                    self.shift_left = 2
+                else:
+                    self.shift_left = 0
+                if self.left_chamber_active == 1 or self.element_index == 6:
+                    self.canvas.delete(self.image_id)
+                    self.image_id = self.canvas.create_image(self.last_position_x - self.last_size_controls*self.shift_left,
+                                                             self.last_position_y,
+                                                             image=self.tk_photo,
+                                                             tags=("clickable",
+                                                                   str(self.element_index),
+                                                                   str(self.element_number),
+                                                                   str(self.last_position_x - self.last_width / 2),
+                                                                   str(self.last_position_y - self.last_height / 2),
+                                                                   str(self.last_position_x + self.last_width / 2),
+                                                                   str(self.last_position_y + self.last_height / 2),
+                                                                   str(self.element_type)))
+                    self.canvas.delete(self.left_manual_control_id_image)
+                    self.canvas.delete(self.right_manual_control_id_image)
+                    if self.element_index == 4 or self.element_index == 5:
+                        self.left_manual_control_id_image = self.canvas.create_image(
+                            self.last_position_x - self.last_size_controls*3,
+                            self.last_position_y,
+                            image=self.empty_photo, tag=self.tag_name_left,
+                            anchor='nw')
+                        if self.flag_left_control[3] == 1:
+                            self.right_manual_control_id_image = self.canvas.create_image(
+                                self.last_position_x + self.last_size_controls*3,
+                                self.last_position_y,
+                                image=self.empty_photo, tag=self.tag_name_right,
+                                anchor='ne')
+                            self.canvas.tag_bind(self.tag_name_left, "<Button-1>", lambda event: self.on_left_side_click())
+                    if self.element_index == 6:
+                        self.canvas.bind("<ButtonRelease-1>", self.on_left_release)
+                self.left_chamber_active = 0
 
     def on_left_release(self, event):
-        self.canvas.unbind("<ButtonRelease-1>")
-        self.canvas.delete(self.image_id)
-        self.image_id = self.canvas.create_image(self.last_position_x,
-                                                 self.last_position_y,
-                                                 image=self.tk_photo,
-                                                 tags=("clickable",
-                                                       str(self.element_index),
-                                                       str(self.element_number),
-                                                       str(self.last_position_x - self.last_width / 2),
-                                                       str(self.last_position_y - self.last_height / 2),
-                                                       str(self.last_position_x + self.last_width / 2),
-                                                       str(self.last_position_y + self.last_height / 2),
-                                                       str(self.element_type)))
-        self.start_simulation()
+        if self.element_type == 0:
+            self.canvas.unbind("<ButtonRelease-1>")
+            self.canvas.delete(self.image_id)
+            self.image_id = self.canvas.create_image(self.last_position_x,
+                                                     self.last_position_y,
+                                                     image=self.tk_photo,
+                                                     tags=("clickable",
+                                                           str(self.element_index),
+                                                           str(self.element_number),
+                                                           str(self.last_position_x - self.last_width / 2),
+                                                           str(self.last_position_y - self.last_height / 2),
+                                                           str(self.last_position_x + self.last_width / 2),
+                                                           str(self.last_position_y + self.last_height / 2),
+                                                           str(self.element_type)))
+            self.start_simulation()
 
     def stop_simulation(self):
         self.canvas.tag_unbind(self.tag_name_left, "<Enter>")
@@ -177,16 +292,10 @@ class PneumaticsObject:
         self.zoom_image(self.count_zoom)
         self.simulation_mode = 0
 
-    def check_hand_enter_left(self):
+    def check_hand_enter(self):
         self.canvas.config(cursor="hand2")
 
-    def check_hand_leave_left(self):
-        self.canvas.config(cursor="")
-
-    def check_hand_enter_right(self):
-        self.canvas.config(cursor="hand2")
-
-    def check_hand_leave_right(self):
+    def check_hand_leave(self,):
         self.canvas.config(cursor="")
 
     def update_photo_inside_new_workspace(self, count_zoom):
@@ -253,10 +362,11 @@ class PneumaticsObject:
         add_y1 = y1_percent_up * (y2 - y1)
         return add_x1, add_y1
 
-    def make_movable(self, count_zoom, rectangle):
+    def make_movable(self, count_zoom, rectangle, update_connection_points):
         self.count_zoom = count_zoom
         self.rectangle = rectangle
-        self.canvas.tag_bind(self.image_id, '<ButtonPress-1>', self.start_drag)
+        self.update_connection_points_Workspace = update_connection_points
+        #self.canvas.tag_bind(self.image_id, '<ButtonPress-1>', self.start_drag)
         self.canvas.tag_bind(self.image_id, '<ButtonRelease-1>', self.stop_drag)
         self.canvas.tag_bind(self.image_id, '<B1-Motion>', self.do_drag)
 
@@ -268,13 +378,18 @@ class PneumaticsObject:
         dx = mouse_x - self.last_position_x
         dy = mouse_y - self.last_position_y
         self.canvas.move(self.image_id, dx, dy)
+        if self.flag_connections == 1:
+            for i in range(0, len(self.connection_id_image)):
+                self.canvas.move(self.connection_id_image[i], dx, dy)
+        tags = self.canvas.gettags(self.image_id)
+        self.update_connection_points_Workspace(tags[7], tags[1], tags[2], self.position_x_init, self.position_y_init)
         self.canvas.move(self.rectangle, dx, dy)  # move rectangle
         self.last_position_x = mouse_x
         self.last_position_y = mouse_y
 
     def stop_drag(self, event):
         self.canvas.delete(self.rectangle)  # delete rectangle
-        self.canvas.tag_unbind(self.image_id, '<ButtonPress-1>')
+        #self.canvas.tag_unbind(self.image_id, '<ButtonPress-1>')
         self.canvas.tag_unbind(self.image_id, '<ButtonRelease-1>')
         self.canvas.tag_unbind(self.image_id, '<B1-Motion>')
         self.position_x_init = int(self.last_position_x)
@@ -282,6 +397,12 @@ class PneumaticsObject:
         self.init_flag = 1
         self.zoom_image(self.count_zoom)
         self.init_flag = 0
+        tags = self.canvas.gettags(self.image_id)
+        self.update_connection_points_Workspace(tags[7], tags[1], tags[2], self.position_x_init, self.position_y_init)
+        if self.flag_connections == 1:
+            for i in range(0, len(self.connection_id_image)):
+                self.canvas.delete(self.connection_id_image[i])
+        self.show_connections(self.flag_connections)
 
     def zoom_image(self, count_zoom):
         width = self.photo.width

@@ -55,6 +55,10 @@ class Workspace:
         self.zoom_in_button.pack(side=tk.LEFT)
         self.zoom_out_button = tk.Button(self.zoom_buttons, text="Zoom out", command=self.zoom_out)
         self.zoom_out_button.pack(side=tk.LEFT)
+        self.connections_button = tk.Button(self.zoom_buttons, text="Connections", command=self.connections)
+        self.connections_button.pack(side=tk.LEFT)
+        self.background_default_color = self.connections_button['bg']
+        self.flag_connections = 0
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
@@ -83,7 +87,336 @@ class Workspace:
         self.menu = tk.Menu(root, tearoff=0)
         self.canvas.bind('<Button-3>', self.show_menu)
 
+        # connections
+        self.connections_list = []
+        # each element contain a list with two elements (element =[type, number, index, connection number])
+        self.lines_for_connections_list = [[]]
+        # each element contain a list with every line drowned for a connection
+        self.store_digits = None
+        self.first_connection = 0
+        self.second_connection = 0
+        self.first_point_connection_x = 0
+        self.first_point_connection_y = 0
+        self.second_point_connection_x = 0
+        self.second_point_connection_y = 0
+        self.flag_first_line = 0
+        self.flag_last_line = 0
+        self.line_coords = None
+        self.next_line_coords = None
+        self.previous_line_coords = None
+        self.temp_line = None
+        self.new_line_coords = None
+        self.index_connections = -1
         self.my_menubar = MenuBar_File.MenuBar(self.root, self.update_rectangle_canvas, self.update_sim_buttons_state)
+
+    def connections(self):
+        self.flag_connections = 1 - self.flag_connections
+        if self.flag_connections == 1:
+            self.connections_button.configure(bg='green')
+            for i in range(0, 3):
+                for j in range(0, len(self.matrix_p_objects[i])):
+                    for k in range(0, len(self.matrix_p_objects[i][j])):
+                        if self.matrix_p_objects[i][j][k] is not None:
+                            self.matrix_p_objects[i][j][k].show_connections(1)
+                            if hasattr(self.matrix_p_objects[i][j][k], 'tag_connection'):
+                                for l in range(0, len(self.matrix_p_objects[i][j][k].tag_connection)):
+                                    self.canvas.tag_bind(str(self.matrix_p_objects[i][j][k].tag_connection[l]),
+                                                         "<Enter>",
+                                                         lambda event: self.check_hand_enter())
+                                    self.canvas.tag_bind(str(self.matrix_p_objects[i][j][k].tag_connection[l]),
+                                                         "<Button-1>",
+                                                         lambda event: self.connect_function())
+                                    self.canvas.tag_bind(str(self.matrix_p_objects[i][j][k].tag_connection[l]),
+                                                         "<Leave>",
+                                                         lambda event: self.check_hand_leave())
+        else:
+            self.connections_button.configure(bg=self.background_default_color)
+            for i in range(0, 3):
+                for j in range(0, len(self.matrix_p_objects[i])):
+                    for k in range(0, len(self.matrix_p_objects[i][j])):
+                        if self.matrix_p_objects[i][j][k] is not None:
+                            self.matrix_p_objects[i][j][k].show_connections(0)
+                            if hasattr(self.matrix_p_objects[i][j][k], 'tag_connection'):
+                                for l in range(0, len(self.matrix_p_objects[i][j][k].tag_connection)):
+                                    self.canvas.tag_unbind(str(self.matrix_p_objects[i][j][k].tag_connection[l]),
+                                                           "<Enter>")
+                                    self.canvas.tag_unbind(str(self.matrix_p_objects[i][j][k].tag_connection[l]),
+                                                           "<Button-1>")
+                                    self.canvas.tag_unbind(str(self.matrix_p_objects[i][j][k].tag_connection[l]),
+                                                           "<Leave>")
+
+    def connect_function(self):
+        item_id = self.canvas.find_withtag("current")[0]
+        tags = self.canvas.gettags(item_id)
+        x1, y1, x2, y2 = self.canvas.bbox(item_id)
+        digits = [int(c) for c in tags[0] if c.isdigit()]
+        # 0 is active
+        # 1 is element
+        # 2 is index element
+        # 3 is index connection
+        if self.first_connection == 0 and self.second_connection == 0:
+            self.store_digits = digits
+            self.first_connection = 1
+            self.first_point_connection_x = int((x1 + x2) / 2)
+            self.first_point_connection_y = int((y1 + y2) / 2)
+        if self.first_connection == 1 and self.second_connection == 1:
+            self.first_connection = 0
+            self.second_connection = 0
+            if self.store_digits != digits:
+                self.second_point_connection_x = int((x1 + x2) / 2)
+                self.second_point_connection_y = int((y1 + y2) / 2)
+                self.connections_list.append([self.store_digits, digits])
+                self.index_connections = self.index_connections + 1
+                self.lines_for_connections_list.append([])
+                temp = self.canvas.create_line(self.first_point_connection_x, self.first_point_connection_y,
+                                               self.first_point_connection_x, self.second_point_connection_y,
+                                               fill='black',
+                                               width=2, tags=('scale', 'line'))
+                self.lines_for_connections_list[self.index_connections].append(temp)
+                temp = self.canvas.create_line(self.first_point_connection_x, self.second_point_connection_y,
+                                               self.second_point_connection_x, self.second_point_connection_y,
+                                               fill='black',
+                                               width=2, tags=('scale', 'line'))
+                self.lines_for_connections_list[self.index_connections].append(temp)
+                self.canvas.tag_bind('line', "<Enter>", lambda event: self.mouse_enter_line())
+                self.canvas.tag_bind('line', "<Leave>", lambda event: self.mouse_leave_line())
+
+                self.canvas.tag_bind(str(self.matrix_p_objects[self.store_digits[0]][self.store_digits[1]][self.store_digits[2]].tag_connection[self.store_digits[3]]), "<Double-Button-1>",
+                                     lambda event: self.double_click_erase())
+                self.canvas.tag_unbind(str(self.matrix_p_objects[self.store_digits[0]][self.store_digits[1]][self.store_digits[2]].tag_connection[self.store_digits[3]]),
+                                     "<Button-1>")
+                self.canvas.tag_bind(str(self.matrix_p_objects[digits[0]][digits[1]][
+                                             digits[2]].tag_connection[digits[3]]),
+                                     "<Double-Button-1>",
+                                     lambda event: self.double_click_erase())
+                self.canvas.tag_unbind(str(self.matrix_p_objects[digits[0]][digits[1]][
+                                               digits[2]].tag_connection[digits[3]]),
+                                       "<Button-1>")
+
+                for i in range(0, len(self.lines_for_connections_list[self.index_connections])):
+                    self.canvas.tag_bind(self.lines_for_connections_list[self.index_connections][i],
+                                         '<ButtonRelease-1>',
+                                         lambda event, index=self.index_connections: self.stop_move_line(event, index))
+                    self.canvas.tag_bind(self.lines_for_connections_list[self.index_connections][i], '<ButtonPress-1>',
+                                         lambda event, index=self.index_connections: self.start_move_line(event, index))
+                    self.canvas.tag_bind(self.lines_for_connections_list[self.index_connections][i], '<B1-Motion>',
+                                         lambda event, index=self.index_connections: self.do_move_line(event, index))
+                self.matrix_p_objects[self.store_digits[0]][self.store_digits[1]][self.store_digits[2]].make_green(
+                    self.store_digits[3])
+                self.matrix_p_objects[digits[0]][digits[1]][digits[2]].make_green(digits[3])
+        if self.first_connection == 1 and self.second_connection == 0:
+            self.second_connection = 1
+
+    def double_click_erase(self):
+        print("erase")
+
+    def do_move_line(self, event, index):
+        item_id = self.canvas.find_withtag("current")[0]
+        new_line_coords = self.canvas.coords(item_id)
+        if (new_line_coords[0] > new_line_coords[2] - 5) and (new_line_coords[0] < new_line_coords[2] + 5):
+            # vertical
+            dx = int(event.x - new_line_coords[0])
+            self.canvas.move(item_id, dx, 0)
+            if self.flag_first_line == 1:
+                self.canvas.delete(self.lines_for_connections_list[index][1])
+                self.lines_for_connections_list[index][1] = self.canvas.create_line(new_line_coords[2],
+                                                                                    new_line_coords[3],
+                                                                                    self.next_line_coords[2],
+                                                                                    self.next_line_coords[3],
+                                                                                    fill='black',
+                                                                                    width=2, tags=('scale', 'line'))
+                self.canvas.delete(self.temp_line)
+                self.temp_line = self.canvas.create_line(self.line_coords[0], self.line_coords[1],
+                                                         new_line_coords[0], new_line_coords[1], fill='black',
+                                                         width=2, tags=('scale', 'line'))
+            elif self.flag_last_line == 1:
+                self.canvas.delete(self.temp_line)
+                self.temp_line = self.canvas.create_line(new_line_coords[2], new_line_coords[3],
+                                                         self.line_coords[2], self.line_coords[3], fill='black',
+                                                         width=2, tags=('scale', 'line'))
+                self.canvas.delete(
+                    self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 2])
+                self.lines_for_connections_list[index][
+                    len(self.lines_for_connections_list[index]) - 2] = self.canvas.create_line(
+                    self.previous_line_coords[0],
+                    self.previous_line_coords[1],
+                    new_line_coords[0],
+                    new_line_coords[1],
+                    fill='black',
+                    width=2,
+                    tags=('scale', 'line'))
+            else:
+                self.canvas.delete(self.lines_for_connections_list[index][self.current_line - 1])
+                self.lines_for_connections_list[index][self.current_line - 1] = self.canvas.create_line(
+                    self.previous_line_coords[0],
+                    self.previous_line_coords[1],
+                    new_line_coords[0],
+                    new_line_coords[1],
+                    fill='black',
+                    width=2, tags=('scale', 'line'))
+                self.canvas.delete(self.lines_for_connections_list[index][self.current_line + 1])
+                self.lines_for_connections_list[index][self.current_line + 1] = self.canvas.create_line(
+                    new_line_coords[2],
+                    new_line_coords[3],
+                    self.next_line_coords[
+                        2],
+                    self.next_line_coords[
+                        3],
+                    fill='black',
+                    width=2, tags=(
+                        'scale', 'line'))
+        else:
+            # horizontal
+            last_position = new_line_coords[1]
+            y = event.y - last_position
+            self.canvas.move(item_id, 0, y)
+            if self.flag_first_line == 1:
+                self.canvas.delete(self.lines_for_connections_list[index][1])
+                self.lines_for_connections_list[index][1] = self.canvas.create_line(new_line_coords[2],
+                                                                                    new_line_coords[3],
+                                                                                    self.next_line_coords[2],
+                                                                                    self.next_line_coords[3],
+                                                                                    fill='black',
+                                                                                    width=2, tags=('scale', 'line'))
+                self.canvas.delete(self.temp_line)
+                self.temp_line = self.canvas.create_line(self.line_coords[0], self.line_coords[1],
+                                                         new_line_coords[0], new_line_coords[1], fill='black',
+                                                         width=2, tags=('scale', 'line'))
+            elif self.flag_last_line == 1:
+                self.canvas.delete(
+                    self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 2])
+                self.lines_for_connections_list[index][
+                    len(self.lines_for_connections_list[index]) - 2] = self.canvas.create_line(
+                    self.previous_line_coords[0],
+                    self.previous_line_coords[1],
+                    new_line_coords[0],
+                    new_line_coords[1],
+                    fill='black',
+                    width=2,
+                    tags=('scale', 'line'))
+                self.canvas.delete(self.temp_line)
+                self.temp_line = self.canvas.create_line(new_line_coords[2], new_line_coords[3],
+                                                         self.line_coords[2], self.line_coords[3], fill='black',
+                                                         width=2, tags=('scale', 'line'))
+            else:
+                self.canvas.delete(self.lines_for_connections_list[index][self.current_line - 1])
+                self.lines_for_connections_list[index][self.current_line - 1] = self.canvas.create_line(
+                    self.previous_line_coords[0],
+                    self.previous_line_coords[1],
+                    new_line_coords[0],
+                    new_line_coords[1],
+                    fill='black',
+                    width=2, tags=('scale', 'line'))
+                self.canvas.delete(self.lines_for_connections_list[index][self.current_line + 1])
+                self.lines_for_connections_list[index][self.current_line + 1] = self.canvas.create_line(
+                    new_line_coords[2],
+                    new_line_coords[3],
+                    self.next_line_coords[
+                        2],
+                    self.next_line_coords[
+                        3],
+                    fill='black',
+                    width=2, tags=(
+                        'scale', 'line'))
+
+    def stop_move_line(self, event, index):
+        if self.flag_first_line == 1:
+            self.lines_for_connections_list[index].insert(0, self.temp_line)
+            self.canvas.tag_bind(self.lines_for_connections_list[index][0], '<ButtonRelease-1>',
+                                 lambda event, index2=index: self.stop_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][0], '<ButtonPress-1>',
+                                 lambda event, index2=index: self.start_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][0], '<B1-Motion>',
+                                 lambda event, index2=index: self.do_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][2], '<ButtonRelease-1>',
+                                 lambda event, index2=index: self.stop_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][2], '<ButtonPress-1>',
+                                 lambda event, index2=index: self.start_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][2], '<B1-Motion>',
+                                 lambda event, index2=index: self.do_move_line(event, index2))
+        elif self.flag_last_line == 1:
+            self.lines_for_connections_list[index].append(self.temp_line)
+            self.canvas.tag_bind(
+                self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 1],
+                '<ButtonRelease-1>',
+                lambda event, index2=index: self.stop_move_line(event, index2))
+            self.canvas.tag_bind(
+                self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 1],
+                '<ButtonPress-1>',
+                lambda event, index2=index: self.start_move_line(event, index2))
+            self.canvas.tag_bind(
+                self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 1],
+                '<B1-Motion>',
+                lambda event, index2=index: self.do_move_line(event, index2))
+            self.canvas.tag_bind(
+                self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 3],
+                '<ButtonRelease-1>',
+                lambda event, index2=index: self.stop_move_line(event, index2))
+            self.canvas.tag_bind(
+                self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 3],
+                '<ButtonPress-1>',
+                lambda event, index2=index: self.start_move_line(event, index2))
+            self.canvas.tag_bind(
+                self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 3],
+                '<B1-Motion>',
+                lambda event, index2=index: self.do_move_line(event, index2))
+        else:
+            self.canvas.tag_bind(self.lines_for_connections_list[index][self.current_line - 1],
+                                 '<ButtonRelease-1>',
+                                 lambda event, index2=index: self.stop_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][self.current_line - 1],
+                                 '<ButtonPress-1>',
+                                 lambda event, index2=index: self.start_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][self.current_line - 1],
+                                 '<B1-Motion>',
+                                 lambda event, index2=index: self.do_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][self.current_line + 1],
+                                 '<ButtonRelease-1>',
+                                 lambda event, index2=index: self.stop_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][self.current_line + 1],
+                                 '<ButtonPress-1>',
+                                 lambda event, index2=index: self.start_move_line(event, index2))
+            self.canvas.tag_bind(self.lines_for_connections_list[index][self.current_line + 1],
+                                 '<B1-Motion>',
+                                 lambda event, index2=index: self.do_move_line(event, index2))
+        self.flag_first_line = 0
+        self.flag_last_line = 0
+        self.temp_line = None
+
+    def start_move_line(self, event, index):
+        item_id = self.canvas.find_withtag("current")[0]
+        new_line_coords = self.canvas.coords(item_id)
+        self.line_coords = new_line_coords
+        for i in range(0, len(self.lines_for_connections_list[index])):
+            if self.lines_for_connections_list[index][i] == item_id:
+                if i == 0:
+                    self.flag_first_line = 1
+                    self.next_line_coords = self.canvas.coords(self.lines_for_connections_list[index][1])
+                elif i == (len(self.lines_for_connections_list[index]) - 1):
+                    self.flag_last_line = 1
+                    self.previous_line_coords = self.canvas.coords(
+                        self.lines_for_connections_list[index][len(self.lines_for_connections_list[index]) - 2])
+                else:
+                    self.previous_line_coords = self.canvas.coords(self.lines_for_connections_list[index][i - 1])
+                    self.next_line_coords = self.canvas.coords(self.lines_for_connections_list[index][i + 1])
+                    self.current_line = i
+
+    def mouse_enter_line(self):
+        item_id = self.canvas.find_withtag("current")[0]
+        new_line_coords = self.canvas.coords(item_id)
+        if (new_line_coords[0] > new_line_coords[2] - 5) and (new_line_coords[0] < new_line_coords[2] + 5):
+            self.canvas.config(cursor="sb_h_double_arrow")
+        else:
+            self.canvas.config(cursor="sb_v_double_arrow")
+
+    def mouse_leave_line(self):
+        self.canvas.config(cursor="")
+
+    def check_hand_enter(self):
+        self.canvas.config(cursor="hand2")
+
+    def check_hand_leave(self, ):
+        self.canvas.config(cursor="")
 
     def update_sim_buttons_state(self, sim_start_flag, sim_continue_flag):
         self.sim_start_flag = sim_start_flag
@@ -106,6 +439,13 @@ class Workspace:
                         if self.matrix_p_objects[i][j][k] is not None:
                             self.matrix_p_objects[i][j][k].stop_simulation()
                             self.matrix_p_objects[i][j][k].zoom_image(self.count_zoom)
+            if self.flag_connections == 1:
+                for i in range(0, 3):
+                    for j in range(0, len(self.matrix_p_objects[i])):
+                        for k in range(0, len(self.matrix_p_objects[i][j])):
+                            if self.matrix_p_objects[i][j][k] is not None:
+                                self.matrix_p_objects[i][j][k].show_connections(0)
+                                self.matrix_p_objects[i][j][k].show_connections(1)
         self.sim_continue_flag = sim_continue_flag
 
     def create_lines_for_rectangle_canvas(self, width_rectangle_canvas, height_rectangle_canvas, step):
@@ -189,11 +529,136 @@ class Workspace:
                                                                                          int(tags[2]), ))
                 self.menu.post(event.x_root, event.y_root)
 
+    def update_connection_points(self, type, index, number, new_x, new_y):
+        type = int(type)
+        index = int(index)
+        number = int(number)
+        for i in range(0, len(self.connections_list)):
+            if self.connections_list[i][0][0] == type and self.connections_list[i][0][1] == index and \
+                    self.connections_list[i][0][2] == number:
+                new_x, new_y = self.canvas.coords(
+                    self.matrix_p_objects[type][index][number].connection_id_image[self.connections_list[i][0][3]])
+                x1, y1, x2, y2 = self.canvas.coords(
+                    self.lines_for_connections_list[i][1])
+                if (x1 + 5) > x2 > (x1 - 5): # vertical
+                    self.canvas.delete(self.lines_for_connections_list[i][1])
+                    self.canvas.delete(self.lines_for_connections_list[i][0])
+                    self.lines_for_connections_list[i][0] = self.canvas.create_line(
+                        new_x, new_y,
+                        x1, new_y,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+                    self.lines_for_connections_list[i][1] = self.canvas.create_line(
+                        x1, new_y,
+                        x2, y2,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+                else: # horizontal
+                    self.canvas.delete(self.lines_for_connections_list[i][1])
+                    self.canvas.delete(self.lines_for_connections_list[i][0])
+                    self.lines_for_connections_list[i][1] = self.canvas.create_line(
+                        new_x, new_y,
+                        new_x, y1,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+                    self.lines_for_connections_list[i][0] = self.canvas.create_line(
+                        new_x, y1,
+                        x2, y2,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+
+                self.canvas.tag_bind(self.lines_for_connections_list[i][1], '<ButtonRelease-1>',
+                                         lambda event, index=self.index_connections: self.stop_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][1], '<ButtonPress-1>',
+                                         lambda event, index=self.index_connections: self.start_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][1], '<B1-Motion>',
+                                         lambda event, index=self.index_connections: self.do_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][0], '<ButtonRelease-1>',
+                                     lambda event, index=self.index_connections: self.stop_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][0], '<ButtonPress-1>',
+                                     lambda event, index=self.index_connections: self.start_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][0], '<B1-Motion>',
+                                     lambda event, index=self.index_connections: self.do_move_line(event, index))
+            if self.connections_list[i][1][0] == type and self.connections_list[i][1][1] == index and \
+                    self.connections_list[i][1][2] == number:
+                new_x, new_y = self.canvas.coords(
+                    self.matrix_p_objects[type][index][number].connection_id_image[self.connections_list[i][1][3]])
+                x1, y1, x2, y2 = self.canvas.coords(
+                    self.lines_for_connections_list[i][len(self.lines_for_connections_list[i]) - 2])
+                if (x1 + 5) > x2 > (x1 - 5):
+                    self.canvas.delete(self.lines_for_connections_list[i][len(self.lines_for_connections_list[i]) - 2])
+                    self.canvas.delete(self.lines_for_connections_list[i][len(self.lines_for_connections_list[i]) - 1])
+                    self.lines_for_connections_list[i][
+                        len(self.lines_for_connections_list[i]) - 2] = self.canvas.create_line(
+                        x1, y1,
+                        x2, new_y,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+                    self.lines_for_connections_list[i][
+                        len(self.lines_for_connections_list[i]) - 1] = self.canvas.create_line(
+                        x1, new_y,
+                        new_x, new_y,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+                else:
+                    self.canvas.delete(self.lines_for_connections_list[i][len(self.lines_for_connections_list[i]) - 2])
+                    self.canvas.delete(self.lines_for_connections_list[i][len(self.lines_for_connections_list[i]) - 1])
+                    self.lines_for_connections_list[i][
+                        len(self.lines_for_connections_list[i]) - 2] = self.canvas.create_line(
+                        x1, y1,
+                        new_x, y2,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+                    self.lines_for_connections_list[i][
+                        len(self.lines_for_connections_list[i]) - 1] = self.canvas.create_line(
+                        new_x, y1,
+                        new_x, new_y,
+                        fill='black',
+                        width=2, tags=('scale', 'line'))
+
+                self.canvas.tag_bind(self.lines_for_connections_list[i][
+                                             len(self.lines_for_connections_list[i]) - 1], '<ButtonRelease-1>',
+                                         lambda event, index=self.index_connections: self.stop_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][
+                                             len(self.lines_for_connections_list[i]) - 1], '<ButtonPress-1>',
+                                         lambda event, index=self.index_connections: self.start_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][
+                                             len(self.lines_for_connections_list[i]) - 1], '<B1-Motion>',
+                                         lambda event, index=self.index_connections: self.do_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][
+                                         len(self.lines_for_connections_list[i]) - 2], '<ButtonRelease-1>',
+                                     lambda event, index=self.index_connections: self.stop_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][
+                                         len(self.lines_for_connections_list[i]) - 2], '<ButtonPress-1>',
+                                     lambda event, index=self.index_connections: self.start_move_line(event, index))
+                self.canvas.tag_bind(self.lines_for_connections_list[i][
+                                         len(self.lines_for_connections_list[i]) - 2], '<B1-Motion>',
+                                     lambda event, index=self.index_connections: self.do_move_line(event, index))
+
     def send_data_from_parameters(self, new_tk_photo, flag_left_control, flag_right_control):
         self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
             self.current_photo_number].flag_left_control = flag_left_control
         self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
             self.current_photo_number].flag_right_control = flag_right_control
+        if flag_left_control[0] == 1 and flag_right_control[0] == 0:
+            self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+                self.current_photo_number].adding_from_controls = int(
+                self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+                    self.current_photo_number].last_size_controls / 2)
+        if flag_left_control[0] == 0 and flag_right_control[0] == 1:
+            self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+                self.current_photo_number].adding_from_controls = - int(
+                self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+                    self.current_photo_number].last_size_controls / 2)
+        if flag_left_control[0] == flag_right_control[0]:
+            self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+                self.current_photo_number].adding_from_controls = 0
+        if self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+            self.current_photo_number].flag_connections == 1:
+            self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+                self.current_photo_number].show_connections(0)
+            self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
+                self.current_photo_number].show_connections(1)
         self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
             self.current_photo_number].photo = new_tk_photo
         self.matrix_p_objects[self.current_photo_type][self.current_photo_index][
@@ -227,9 +692,8 @@ class Workspace:
     def make_movable(self, type_object, index_object, number_object, x1, y1, x2, y2):
         self.rectangle = self.canvas.create_rectangle(float(x1) - 5, float(y1) - 5, float(x2) + 5, float(y2) + 5,
                                                       outline='green')
-        self.matrix_p_objects[type_object][index_object][number_object].make_movable(self.count_zoom, self.rectangle)
-        self.matrix_p_objects[type_object][index_object][number_object].make_movable(self.count_zoom, self.rectangle)
-        self.matrix_p_objects[type_object][index_object][number_object].make_movable(self.count_zoom, self.rectangle)
+        self.matrix_p_objects[type_object][index_object][number_object].make_movable(self.count_zoom, self.rectangle,
+                                                                                     self.update_connection_points)
 
     def delete_unplaced_object(self):
         self.canvas.unbind("<Button-1>")
@@ -282,8 +746,10 @@ class Workspace:
         for i in range(0, 3):
             for j in range(0, len(self.matrix_p_objects[i])):
                 for k in range(0, len(self.matrix_p_objects[i][j])):
-                    if None != self.matrix_p_objects[i][j][k]:
+                    if self.matrix_p_objects[i][j][k] is not None:
                         self.matrix_p_objects[i][j][k].zoom_image(self.count_zoom)
+        self.flag_connections = 0
+        self.connections()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def zoom_out(self):
@@ -295,6 +761,8 @@ class Workspace:
                 for k in range(0, len(self.matrix_p_objects[i][j])):
                     if None != self.matrix_p_objects[i][j][k]:
                         self.matrix_p_objects[i][j][k].zoom_image(self.count_zoom)
+        self.flag_connections = 0
+        self.connections()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def on_resize(self, event):

@@ -98,3 +98,6 @@ continue_button = Image.open(resource_path("images/sim_buttons/continue_button.p
 stop_button = Image.open(resource_path("images/sim_buttons/stop_button.png"))
 
 simulation_buttons = [start_button, pause_button, continue_button, stop_button]
+
+circle_connection_red = Image.open(resource_path("images/icons_and_connections/circle_connection_red.png"))
+circle_connection_green = Image.open(resource_path("images/icons_and_connections/circle_connection_green.png"))
