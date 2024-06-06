@@ -1,7 +1,9 @@
 # App_Mechatronics_Simulation
 
 The repository stores an application who was suppose to simulate mechatronic processes.
+
 Everything is made in python using tkinter library.
+
 Features implemented:
 - drop down list with all components (Pneumatics, Hydraulics, Electronics)
 - search button
