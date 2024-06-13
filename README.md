@@ -15,5 +15,6 @@ Features implemented:
 - option to delete an object (right-click and "Delete")
 - option to set the parameters of an objects (ex: Pneumatics->Active->Valve 5/3, right click and click on name)
 - zoom in and zoom out buttons (4 views)
+- button who allow connections to be made between objects
 - buttons who control the simulation (Start, Pause, Stop)
 - when the Start button from simulation is pressed the valves who have buttons and spring shall work corectly (it work only for "Valve 5/3" object)
