@@ -4,6 +4,8 @@ The repository stores an application who was suppose to simulate mechatronic pro
 
 Everything is made in python using tkinter library.
 
+The demonstration video is hosted in github pages: [video](https://florian98n.github.io/App_Mechatronics_Simulation/)
+
 Features implemented:
 - drop down list with all components (Pneumatics, Hydraulics, Electronics)
 - search button
